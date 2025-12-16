@@ -1,5 +1,7 @@
 import streamlit as st
-import requests
+import numpy as np
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
 
 # ----------------------------------
 # App Config
@@ -11,19 +13,70 @@ st.set_page_config(
 )
 
 st.title("🧠 Article Recommendation System")
-st.write("Get similar articles using NLP-based similarity.")
+st.write("Get similar articles using NLP-based similarity (local model).")
 
 # ----------------------------------
-# API Configuration
+# Load Data (Option A: Local recommender)
 # ----------------------------------
-API_BASE_URL = "https://nlpapi-aynb.onrender.com/"  # change only if deployed elsewhere
+@st.cache_resource
+
+def load_data():
+    df = pd.read_csv("data/articles_clean.csv")
+    embeddings = np.load("data/embeddings_w2v.npy")
+
+    df["_index"] = range(len(df))
+    df = df.set_index("ID")
+
+    return df, embeddings
+
+try:
+    df, embeddings = load_data()
+    st.success("✅ Model and data loaded successfully")
+except Exception as e:
+    st.error(f"❌ Failed to load data: {e}")
+    st.stop()
+
+# ----------------------------------
+# Recommender Function
+# ----------------------------------
+
+def recommend(article_id, top_n=5):
+    article_id = int(article_id)
+
+    if article_id not in df.index:
+        return []
+
+    idx = df.loc[article_id, "_index"]
+    query_vec = embeddings[idx].reshape(1, -1)
+
+    scores = cosine_similarity(query_vec, embeddings)[0]
+    ranked_indices = scores.argsort()[::-1]
+
+    results = []
+    for i in ranked_indices:
+        result_id = df[df["_index"] == i].index[0]
+
+        if result_id == article_id:
+            continue
+
+        results.append({
+            "ID": int(result_id),
+            "Title": df.loc[result_id, "Title"],
+            "Score": float(scores[i])
+        })
+
+        if len(results) >= top_n:
+            break
+
+    return results
 
 # ----------------------------------
 # User Inputs
 # ----------------------------------
 article_id = st.number_input(
     "Article ID",
-    min_value=0,
+    min_value=int(df.index.min()),
+    max_value=int(df.index.max()),
     step=1
 )
 
@@ -38,36 +91,21 @@ top_n = st.slider(
 # Action
 # ----------------------------------
 if st.button("🔍 Get Recommendations"):
-    with st.spinner("Fetching recommendations..."):
-        try:
-            response = requests.get(
-                f"{API_BASE_URL}/recommend/{article_id}",
-                params={"n": top_n}
-            )
+    with st.spinner("Computing recommendations..."):
+        results = recommend(article_id, top_n)
 
-            if response.status_code == 200:
-                data = response.json()
+        if not results:
+            st.warning("No recommendations found for this article ID.")
+        else:
+            st.subheader("📄 Reference Article")
+            st.write(df.loc[int(article_id), "Title"])
 
-                st.subheader("📄 Reference Article")
-                st.write(data["query_title"])
-
-                st.subheader("✨ Recommendations")
-                for i, rec in enumerate(data["recommendations"], 1):
-                    st.markdown(
-                        f"""
-                        **{i}. {rec['Title']}**  
-                        • ID: `{rec['ID']}`  
-                        • Similarity Score: `{rec['Score']:.4f}`
-                        """
-                    )
-            else:
-                st.error(f"API Error: {response.status_code}")
-
-        except Exception as e:
-            st.error(f"Connection error: {e}")
-
-
-
-
-
-
+            st.subheader("✨ Recommendations")
+            for i, rec in enumerate(results, 1):
+                st.markdown(
+                    f"""
+                    **{i}. {rec['Title']}**  
+                    • ID: `{rec['ID']}`  
+                    • Similarity Score: `{rec['Score']:.4f}`
+                    """
+                )
