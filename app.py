@@ -1,7 +1,5 @@
 import streamlit as st
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+import requests
 
 # ----------------------------------
 # App Config
@@ -13,78 +11,12 @@ st.set_page_config(
 )
 
 st.title("🧠 Article Recommendation System")
-st.write("Article similarity using TF-IDF and cosine similarity.")
+st.write("Get similar articles using NLP-based similarity.")
 
 # ----------------------------------
-# Load Data
+# API Configuration
 # ----------------------------------
-@st.cache_resource
-def load_data():
-    df = pd.read_json("data/articles.json")
-    return df
-
-
-df = load_data()
-
-# 🔍 Show columns (VERY IMPORTANT for debugging)
-st.write("📂 Detected columns:", list(df.columns))
-
-# ----------------------------------
-# Detect text column automatically
-# ----------------------------------
-TEXT_CANDIDATES = ["content", "text", "body", "article", "description"]
-
-text_column = None
-for col in TEXT_CANDIDATES:
-    if col in df.columns:
-        text_column = col
-        break
-
-if text_column is None:
-    st.error("❌ No text column found in JSON file.")
-    st.stop()
-
-st.success(f"✅ Using text column: `{text_column}`")
-
-# ----------------------------------
-# Vectorization
-# ----------------------------------
-@st.cache_resource
-def build_tfidf(corpus):
-    vectorizer = TfidfVectorizer(
-        stop_words="english",
-        max_features=5000
-    )
-    vectors = vectorizer.fit_transform(corpus.fillna(""))
-    return vectors
-
-
-tfidf_matrix = build_tfidf(df[text_column])
-
-# ----------------------------------
-# Recommendation Function
-# ----------------------------------
-def recommend(article_id, top_n=3):
-    if article_id >= len(df):
-        return None, None
-
-    similarities = cosine_similarity(
-        tfidf_matrix[article_id],
-        tfidf_matrix
-    ).flatten()
-
-    top_indices = similarities.argsort()[::-1][1 : top_n + 1]
-
-    results = []
-    for idx in top_indices:
-        results.append({
-            "ID": int(idx),
-            "Title": df.iloc[idx].get("title", "No title"),
-            "Score": float(similarities[idx])
-        })
-
-    return df.iloc[article_id].get("title", "No title"), results
-
+API_BASE_URL = "https://nlpapi-aynb.onrender.com/"  # change only if deployed elsewhere
 
 # ----------------------------------
 # User Inputs
@@ -92,7 +24,6 @@ def recommend(article_id, top_n=3):
 article_id = st.number_input(
     "Article ID",
     min_value=0,
-    max_value=len(df) - 1,
     step=1
 )
 
@@ -107,21 +38,34 @@ top_n = st.slider(
 # Action
 # ----------------------------------
 if st.button("🔍 Get Recommendations"):
-    with st.spinner("Computing similarity..."):
-        query_title, recommendations = recommend(article_id, top_n)
+    with st.spinner("Fetching recommendations..."):
+        try:
+            response = requests.get(
+                f"{API_BASE_URL}/recommend/{article_id}",
+                params={"n": top_n}
+            )
 
-        if query_title is None:
-            st.error("Invalid Article ID")
-        else:
-            st.subheader("📄 Reference Article")
-            st.write(query_title)
+            if response.status_code == 200:
+                data = response.json()
 
-            st.subheader("✨ Recommendations")
-            for i, rec in enumerate(recommendations, 1):
-                st.markdown(
-                    f"""
-                    **{i}. {rec['Title']}**  
-                    • ID: `{rec['ID']}`  
-                    • Similarity Score: `{rec['Score']:.4f}`
-                    """
-                )
+                st.subheader("📄 Reference Article")
+                st.write(data["query_title"])
+
+                st.subheader("✨ Recommendations")
+                for i, rec in enumerate(data["recommendations"], 1):
+                    st.markdown(
+                        f"""
+                        **{i}. {rec['Title']}**  
+                        • ID: `{rec['ID']}`  
+                        • Similarity Score: `{rec['Score']:.4f}`
+                        """
+                    )
+            else:
+                st.error(f"API Error: {response.status_code}")
+
+        except Exception as e:
+            st.error(f"Connection error: {e}")
+
+
+
+
