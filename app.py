@@ -13,82 +13,54 @@ st.set_page_config(
 )
 
 st.title("🧠 Article Recommendation System")
-st.write("Get similar articles using NLP-based similarity (JSON + local embeddings).")
+st.write("Get similar articles using NLP-based similarity (Word2Vec embeddings).")
 
 # ----------------------------------
-# Load Data (JSON + embeddings)
+# Load Data
 # ----------------------------------
 @st.cache_resource
-
 def load_data():
     # Load articles from JSON
     df = pd.read_json("data/articles.json")
 
-    # Keep only required columns
-    df = df[["ID", "Title"]]
-
     # Load embeddings
     embeddings = np.load("data/embeddings_w2v.npy")
 
-    # Safety check
-    if len(df) != embeddings.shape[0]:
-        raise ValueError(
-            f"Mismatch: {len(df)} articles but {embeddings.shape[0]} embeddings"
-        )
-
-    df["_index"] = range(len(df))
-    df = df.set_index("ID")
-
     return df, embeddings
 
-try:
-    df, embeddings = load_data()
-    st.success("✅ Data and embeddings loaded successfully")
-except Exception as e:
-    st.error(f"❌ Failed to load data: {e}")
-    st.stop()
+
+df, embeddings = load_data()
 
 # ----------------------------------
-# Recommender Function
+# Recommendation Function
 # ----------------------------------
+def recommend(article_id, top_n=3):
+    if article_id >= len(embeddings):
+        return None, None
 
-def recommend(article_id, top_n=5):
-    article_id = int(article_id)
+    query_vec = embeddings[article_id].reshape(1, -1)
+    similarities = cosine_similarity(query_vec, embeddings)[0]
 
-    if article_id not in df.index:
-        return []
-
-    idx = df.loc[article_id, "_index"]
-    query_vec = embeddings[idx].reshape(1, -1)
-
-    scores = cosine_similarity(query_vec, embeddings)[0]
-    ranked_indices = scores.argsort()[::-1]
+    top_indices = similarities.argsort()[::-1][1 : top_n + 1]
 
     results = []
-    for i in ranked_indices:
-        result_id = df[df["_index"] == i].index[0]
-
-        if result_id == article_id:
-            continue
-
+    for idx in top_indices:
         results.append({
-            "ID": int(result_id),
-            "Title": df.loc[result_id, "Title"],
-            "Score": float(scores[i])
+            "ID": int(idx),
+            "Title": df.iloc[idx]["title"],
+            "Score": float(similarities[idx])
         })
 
-        if len(results) >= top_n:
-            break
+    return df.iloc[article_id]["title"], results
 
-    return results
 
 # ----------------------------------
 # User Inputs
 # ----------------------------------
 article_id = st.number_input(
     "Article ID",
-    min_value=int(df.index.min()),
-    max_value=int(df.index.max()),
+    min_value=0,
+    max_value=len(df) - 1,
     step=1
 )
 
@@ -103,17 +75,17 @@ top_n = st.slider(
 # Action
 # ----------------------------------
 if st.button("🔍 Get Recommendations"):
-    with st.spinner("Computing recommendations..."):
-        results = recommend(article_id, top_n)
+    with st.spinner("Computing similarities..."):
+        query_title, recommendations = recommend(article_id, top_n)
 
-        if not results:
-            st.warning("No recommendations found for this article ID.")
+        if query_title is None:
+            st.error("Invalid Article ID")
         else:
             st.subheader("📄 Reference Article")
-            st.write(df.loc[int(article_id), "Title"])
+            st.write(query_title)
 
             st.subheader("✨ Recommendations")
-            for i, rec in enumerate(results, 1):
+            for i, rec in enumerate(recommendations, 1):
                 st.markdown(
                     f"""
                     **{i}. {rec['Title']}**  
