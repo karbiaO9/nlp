@@ -26,6 +26,26 @@ def load_data():
 
 df = load_data()
 
+# 🔍 Show columns (VERY IMPORTANT for debugging)
+st.write("📂 Detected columns:", list(df.columns))
+
+# ----------------------------------
+# Detect text column automatically
+# ----------------------------------
+TEXT_CANDIDATES = ["content", "text", "body", "article", "description"]
+
+text_column = None
+for col in TEXT_CANDIDATES:
+    if col in df.columns:
+        text_column = col
+        break
+
+if text_column is None:
+    st.error("❌ No text column found in JSON file.")
+    st.stop()
+
+st.success(f"✅ Using text column: `{text_column}`")
+
 # ----------------------------------
 # Vectorization
 # ----------------------------------
@@ -35,11 +55,11 @@ def build_tfidf(corpus):
         stop_words="english",
         max_features=5000
     )
-    vectors = vectorizer.fit_transform(corpus)
+    vectors = vectorizer.fit_transform(corpus.fillna(""))
     return vectors
 
 
-tfidf_matrix = build_tfidf(df["content"])
+tfidf_matrix = build_tfidf(df[text_column])
 
 # ----------------------------------
 # Recommendation Function
@@ -59,11 +79,11 @@ def recommend(article_id, top_n=3):
     for idx in top_indices:
         results.append({
             "ID": int(idx),
-            "Title": df.iloc[idx]["title"],
+            "Title": df.iloc[idx].get("title", "No title"),
             "Score": float(similarities[idx])
         })
 
-    return df.iloc[article_id]["title"], results
+    return df.iloc[article_id].get("title", "No title"), results
 
 
 # ----------------------------------
