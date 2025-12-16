@@ -1,6 +1,6 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # ----------------------------------
@@ -13,33 +13,45 @@ st.set_page_config(
 )
 
 st.title("🧠 Article Recommendation System")
-st.write("Get similar articles using NLP-based similarity (Word2Vec embeddings).")
+st.write("Article similarity using TF-IDF and cosine similarity.")
 
 # ----------------------------------
 # Load Data
 # ----------------------------------
 @st.cache_resource
 def load_data():
-    # Load articles from JSON
     df = pd.read_json("data/articles.json")
-
-    # Load embeddings
-    embeddings = np.load("data/embeddings_w2v.npy")
-
-    return df, embeddings
+    return df
 
 
-df, embeddings = load_data()
+df = load_data()
+
+# ----------------------------------
+# Vectorization
+# ----------------------------------
+@st.cache_resource
+def build_tfidf(corpus):
+    vectorizer = TfidfVectorizer(
+        stop_words="english",
+        max_features=5000
+    )
+    vectors = vectorizer.fit_transform(corpus)
+    return vectors
+
+
+tfidf_matrix = build_tfidf(df["content"])
 
 # ----------------------------------
 # Recommendation Function
 # ----------------------------------
 def recommend(article_id, top_n=3):
-    if article_id >= len(embeddings):
+    if article_id >= len(df):
         return None, None
 
-    query_vec = embeddings[article_id].reshape(1, -1)
-    similarities = cosine_similarity(query_vec, embeddings)[0]
+    similarities = cosine_similarity(
+        tfidf_matrix[article_id],
+        tfidf_matrix
+    ).flatten()
 
     top_indices = similarities.argsort()[::-1][1 : top_n + 1]
 
@@ -75,7 +87,7 @@ top_n = st.slider(
 # Action
 # ----------------------------------
 if st.button("🔍 Get Recommendations"):
-    with st.spinner("Computing similarities..."):
+    with st.spinner("Computing similarity..."):
         query_title, recommendations = recommend(article_id, top_n)
 
         if query_title is None:
