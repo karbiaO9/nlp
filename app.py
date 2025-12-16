@@ -1,22 +1,68 @@
 import streamlit as st
-from recommender import recommend
+import requests
 
-st.set_page_config(page_title="NLP Recommender", page_icon="🧠")
+# ----------------------------------
+# App Config
+# ----------------------------------
+st.set_page_config(
+    page_title="NLP Article Recommender",
+    page_icon="🧠",
+    layout="centered"
+)
+
 st.title("🧠 Article Recommendation System")
+st.write("Get similar articles using NLP-based similarity.")
 
-article_id = st.number_input("Article ID", min_value=0, step=1)
-top_n = st.slider("Number of recommendations", 1, 10, 3)
+# ----------------------------------
+# API Configuration
+# ----------------------------------
+API_BASE_URL = "http://127.0.0.1:8000"  # change only if deployed elsewhere
 
+# ----------------------------------
+# User Inputs
+# ----------------------------------
+article_id = st.number_input(
+    "Article ID",
+    min_value=0,
+    step=1
+)
+
+top_n = st.slider(
+    "Number of recommendations",
+    min_value=1,
+    max_value=10,
+    value=3
+)
+
+# ----------------------------------
+# Action
+# ----------------------------------
 if st.button("🔍 Get Recommendations"):
-    try:
-        results, title = recommend(article_id, top_n)
+    with st.spinner("Fetching recommendations..."):
+        try:
+            response = requests.get(
+                f"{API_BASE_URL}/recommend/{article_id}",
+                params={"n": top_n}
+            )
 
-        st.subheader("📄 Reference Article")
-        st.write(title)
+            if response.status_code == 200:
+                data = response.json()
 
-        st.subheader("✨ Recommendations")
-        for i, r in enumerate(results, 1):
-            st.markdown(f"**{i}. {r['Title']}** — score: `{r['Score']:.4f}`")
+                st.subheader("📄 Reference Article")
+                st.write(data["query_title"])
 
-    except Exception as e:
-        st.error(str(e))
+                st.subheader("✨ Recommendations")
+                for i, rec in enumerate(data["recommendations"], 1):
+                    st.markdown(
+                        f"""
+                        **{i}. {rec['Title']}**  
+                        • ID: `{rec['ID']}`  
+                        • Similarity Score: `{rec['Score']:.4f}`
+                        """
+                    )
+            else:
+                st.error(f"API Error: {response.status_code}")
+
+        except Exception as e:
+            st.error(f"Connection error: {e}")
+
