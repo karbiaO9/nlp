@@ -21,7 +21,7 @@ st.write("Get similar articles using NLP-based similarity (local model).")
 @st.cache_resource
 
 def load_data():
-    df = pd.read_csv("data/articles_clean.csv")
+    df = pd.read_json("data/articles.json")
     embeddings = np.load("data/embeddings_w2v.npy")
 
     df["_index"] = range(len(df))
@@ -109,3 +109,4 @@ if st.button("🔍 Get Recommendations"):
                     • Similarity Score: `{rec['Score']:.4f}`
                     """
                 )
+
