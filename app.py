@@ -16,7 +16,7 @@ st.write("Get similar articles using NLP-based similarity.")
 # ----------------------------------
 # API Configuration
 # ----------------------------------
-API_BASE_URL = "http://127.0.0.1:8000"  # change only if deployed elsewhere
+API_BASE_URL = "http://127.0.0.1:8080"  # change only if deployed elsewhere
 
 # ----------------------------------
 # User Inputs
@@ -65,4 +65,5 @@ if st.button("🔍 Get Recommendations"):
 
         except Exception as e:
             st.error(f"Connection error: {e}")
+
 
